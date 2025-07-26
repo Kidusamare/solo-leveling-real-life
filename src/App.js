@@ -4,7 +4,8 @@ import { auth } from "./firebase";
 import { loadUserData, saveUserData } from "./firestoreHelpers";
 import { Link } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
-import { Heart, Brain, MessageCircle, Dumbbell, Flame, BookOpen, Settings } from "lucide-react";
+import { toast } from "react-hot-toast";
+import { Heart, Brain, MessageCircle, Dumbbell, Flame, BookOpen, Settings, Trash2, Calendar } from "lucide-react";
 import { useTheme } from "./hooks/useTheme";
 
 // Enhanced AttributeCircle component with glassmorphic design
@@ -186,7 +187,7 @@ function AttributeCircle({ icon, label, value, color, maxValue = 10 }) {
 }
 
 // Quest Card component with glassmorphic design
-function QuestCard({ quest, isCompleted, onToggle, stats }) {
+function QuestCard({ quest, isCompleted, onToggle, onRemove, stats }) {
   const { isDarkMode } = useTheme();
 
   const getStatIcon = (statName) => {
@@ -263,11 +264,20 @@ function QuestCard({ quest, isCompleted, onToggle, stats }) {
           )}
         </div>
         
-        <div className="flex flex-col items-end gap-1">
-          <span className="text-sm font-bold text-theme-accent text-glow">{quest.xp} XP</span>
-          {isCompleted && (
-            <span className="text-xs text-green-400">✓ Completed</span>
-          )}
+        <div className="flex items-center gap-2">
+          <div className="flex flex-col items-end gap-1">
+            <span className="text-sm font-bold text-theme-accent text-glow">{quest.xp} XP</span>
+            {isCompleted && (
+              <span className="text-xs text-green-400">✓ Completed</span>
+            )}
+          </div>
+          <button
+            onClick={() => onRemove(quest.id)}
+            className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-all duration-300 hover:shadow-[0_0_10px_rgba(239,68,68,0.3)] opacity-60 hover:opacity-100"
+            title="Remove quest"
+          >
+            <Trash2 size={16} />
+          </button>
         </div>
       </div>
     </div>
@@ -433,6 +443,27 @@ function App() {
     setNewQuestXP("");
   };
 
+  const handleRemoveQuest = async (questId) => {
+    // Find the quest before removing it
+    const removedQuest = quests.find(quest => quest.id === questId);
+    
+    // Remove quest from the quests array
+    const updatedQuests = quests.filter(quest => quest.id !== questId);
+    setQuests(updatedQuests);
+    
+    // Also remove from completed quests if it was completed
+    const updatedCompletedQuests = { ...completedQuests };
+    delete updatedCompletedQuests[questId];
+    setCompletedQuests(updatedCompletedQuests);
+    
+    // Show success message
+    if (removedQuest) {
+      toast.success(`Removed quest: "${removedQuest.text}"`);
+    }
+    
+    // The useEffect will automatically save the updated data to Firebase
+  };
+
   const handleLogout = async () => {
     try {
       await signOut(auth);
@@ -517,13 +548,20 @@ function App() {
         </div>
 
         {/* Navigation */}
-        <div className="mb-6">
+        <div className="mb-6 flex gap-3">
           <Link
             to="/goals"
             className="inline-flex items-center gap-2 px-4 py-2 glass-card rounded-lg font-medium hover:neon-glow transition-all duration-300"
           >
             <span className="text-theme-accent">⚡</span>
             Manage Goals
+          </Link>
+          <Link
+            to="/calendar"
+            className="inline-flex items-center gap-2 px-4 py-2 glass-card rounded-lg font-medium hover:neon-glow transition-all duration-300"
+          >
+            <Calendar size={18} className="text-theme-accent" />
+            Weekly Habits
           </Link>
         </div>
       </div>
@@ -584,6 +622,7 @@ function App() {
               quest={quest}
               isCompleted={completedQuests[quest.id] || false}
               onToggle={handleQuestComplete}
+              onRemove={handleRemoveQuest}
               stats={stats}
             />
           ))}

@@ -3,29 +3,11 @@ import { auth } from "../firebase";
 import { loadUserData, saveUserData } from "../firestoreHelpers";
 import { toast } from "react-hot-toast";
 import { Link } from "react-router-dom";
-import { Sparkles, Loader2, Plus, ArrowLeft } from "lucide-react";
+import { Sparkles, Loader2, ArrowLeft, X } from "lucide-react";
 import { useTheme } from "../hooks/useTheme";
 import { Toaster } from "react-hot-toast";
+import { getQuestSuggestions, getFallbackQuests } from "../openaiHelpers";
 
-// Fallback quests function (temporary until we fix AI)
-function getFallbackQuests(goalText, goalType = "habit") {
-  const quests = [];
-  
-  if (goalType === "habit") {
-    quests.push(
-      { id: Date.now() + 1, text: `Complete: ${goalText}`, xp: 25, stats: { mindset: 2 } },
-      { id: Date.now() + 2, text: `Track progress for: ${goalText}`, xp: 15, stats: { education: 1 } }
-    );
-  } else {
-    quests.push(
-      { id: Date.now() + 1, text: `Research: ${goalText}`, xp: 30, stats: { education: 3 } },
-      { id: Date.now() + 2, text: `Plan steps for: ${goalText}`, xp: 20, stats: { mindset: 2 } },
-      { id: Date.now() + 3, text: `Take first step toward: ${goalText}`, xp: 25, stats: { healthWellness: 1 } }
-    );
-  }
-  
-  return quests;
-}
 
 export default function GoalManagement() {
   const { isDarkMode } = useTheme();
@@ -37,6 +19,8 @@ export default function GoalManagement() {
   const [materialGoalError, setMaterialGoalError] = useState("");
   const [loadingGoals, setLoadingGoals] = useState(true);
   const [generatingQuests, setGeneratingQuests] = useState({});
+  const [currentQuests, setCurrentQuests] = useState([]);
+  const [adviceMessage, setAdviceMessage] = useState("");
 
   useEffect(() => {
     const fetchGoals = async (uid) => {
@@ -45,6 +29,7 @@ export default function GoalManagement() {
         if (data) {
           setHabitGoals(data.habitGoals || []);
           setMaterialGoals(data.materialGoals || []);
+          setCurrentQuests(data.quests || []);
         }
       } catch (error) {
         console.error("Error fetching goals:", error);
@@ -147,12 +132,39 @@ export default function GoalManagement() {
     setGeneratingQuests(prev => ({ ...prev, [goal.id]: true }));
     
     try {
-      // For now, use fallback quests
-      const quests = getFallbackQuests(goal.text, goalType);
+      const allGoals = [...habitGoals, ...materialGoals];
+      let result;
       
-      // Add quests to the main quest list (you'll need to implement this)
-      console.log("Generated quests:", quests);
-      toast.success(`Generated ${quests.length} quests from "${goal.text}"`);
+      try {
+        // Try AI quest generation first
+        result = await getQuestSuggestions(goal.text, goalType, currentQuests, allGoals);
+      } catch (error) {
+        console.log("AI generation failed, using fallback:", error);
+        // Fall back to local generation
+        result = getFallbackQuests(goal.text, goalType, currentQuests, allGoals);
+      }
+      
+      // Show advice if provided
+      if (result.advice) {
+        setAdviceMessage(result.advice);
+        setTimeout(() => setAdviceMessage(""), 8000); // Clear after 8 seconds
+      }
+      
+      // Add quests to the user's data
+      const user = auth.currentUser;
+      if (!user) throw new Error("No user logged in");
+      
+      const userData = await loadUserData(user.uid);
+      const updatedQuests = [...currentQuests, ...result.quests];
+      
+      await saveUserData(user.uid, {
+        ...userData,
+        quests: updatedQuests
+      });
+      
+      setCurrentQuests(updatedQuests);
+      
+      toast.success(`Generated ${result.quests.length} quest${result.quests.length === 1 ? '' : 's'} from "${goal.text}"`);
       
     } catch (error) {
       console.error("Error generating quests:", error);
@@ -218,6 +230,25 @@ export default function GoalManagement() {
             <p className="text-theme-secondary">Track your progress</p>
           </div>
         </div>
+        
+        {/* Advice Message */}
+        {adviceMessage && (
+          <div className="glass-panel p-4 mb-4 border-l-4 border-theme-accent relative">
+            <button
+              onClick={() => setAdviceMessage("")}
+              className="absolute top-2 right-2 p-1 text-theme-secondary hover:text-theme-primary transition-colors"
+            >
+              <X size={16} />
+            </button>
+            <div className="flex items-start gap-3">
+              <Sparkles className="text-theme-accent mt-0.5" size={18} />
+              <div>
+                <h3 className="font-semibold text-theme-accent mb-1">Smart Advice</h3>
+                <p className="text-theme-secondary text-sm">{adviceMessage}</p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="relative z-10 space-y-6 max-w-4xl mx-auto">

@@ -9,6 +9,7 @@ import Login from "./Login";
 import Register from "./Register";
 import App from "./App";
 import GoalManagement from "./pages/GoalManagement";
+import WeeklyCalendar from "./pages/WeeklyCalendar";
 import Settings from "./pages/Settings";
 
 export default function RouterComponent() {
@@ -42,6 +43,7 @@ export default function RouterComponent() {
           <Route path="/register" element={!user ? <Register /> : <Navigate to="/" />} />
           <Route path="/" element={user ? <App /> : <Navigate to="/login" />} />
           <Route path="/goals" element={user ? <GoalManagement /> : <Navigate to="/login" />} />
+          <Route path="/calendar" element={user ? <WeeklyCalendar /> : <Navigate to="/login" />} />
           <Route path="/settings" element={user ? <Settings /> : <Navigate to="/login" />} />
           {/* Optional: 404 route */}
           <Route path="*" element={<Navigate to={user ? "/" : "/login"} />} />
